@@ -2,96 +2,182 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { Link } from 'react-router-dom';
 
-function HomePage() {
-  const [issues, setIssues] = useState([]);
-  const [user, setUser] = useState(null);
+const HomePage = () => {
+    const [issues, setIssues] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [user, setUser] = useState(null);
 
-  useEffect(() => {
-    const fetchUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      setUser(user);
-    };
-    fetchUser();
+    // Step 1: Sirf user ko fetch karein jab component load ho
+    useEffect(() => {
+        const fetchUser = async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            setUser(user);
+        };
+        fetchUser();
+    }, []);
     
-    // Listen for new issues and comments in real-time
-    const channel = supabase
-      .channel('realtime feed')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'issues' }, fetchIssues)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'upvotes' }, fetchIssues)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'comments' }, fetchIssues)
-      .subscribe();
+    // Step 2: Jab user mil jaaye, tab issues fetch karein aur real-time listener set karein
+    useEffect(() => {
+        if (user) {
+            fetchIssues(); // Initial fetch
+            const channel = supabase
+                .channel('public-feed-final')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'issue_likes' }, fetchIssues)
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'comments' }, fetchIssues)
+                .subscribe();
 
-    fetchIssues();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, []);
-
-  async function fetchIssues() {
-    // Ab hum issues ke saath unka upvote aur comment count dono fetch kar rahe hain
-    const { data, error } = await supabase
-      .from('issues')
-      .select('*, upvotes(count), comments(count)') // Yeh upvote aur comment count laayega
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      console.error("Error fetching issues:", error);
-    } else {
-      setIssues(data);
-    }
-  }
-
-  async function handleUpvote(issueId) {
-    if (!user) {
-      alert("Please login to upvote.");
-      return;
-    }
-    try {
-        const { data: existingUpvote } = await supabase
-            .from('upvotes').select('*').eq('issue_id', issueId).eq('user_id', user.id).single();
-        if (existingUpvote) {
-            await supabase.from('upvotes').delete().eq('issue_id', issueId).eq('user_id', user.id);
+            return () => {
+                supabase.removeChannel(channel);
+            };
         } else {
-            await supabase.from('upvotes').insert({ issue_id: issueId, user_id: user.id });
+             // Agar user logged in nahi hai, to bhi issues dikhayein (bina like status ke)
+            fetchIssues();
         }
-    } catch (error) {
-        // Handle error silently for better UX
-        console.error("Upvote error:", error);
-    }
-  }
+    }, [user]);
 
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-      <div className="md:col-span-2 space-y-6">
-        {issues.map((issue) => (
-          <div key={issue.id} className="bg-white p-6 rounded-lg shadow-md">
-            <div className="flex items-center mb-4">
-                <img src={issue.user_avatar_url || `https://via.placeholder.com/150`} alt={issue.user_full_name} className="w-12 h-12 rounded-full mr-4 object-cover" />
-                <div>
-                  <p className="font-semibold">{issue.user_full_name || 'User'}</p>
-                  <p className={`text-xs px-2 py-1 rounded-full inline-block bg-yellow-100 text-yellow-700`}>{issue.status}</p>
-                </div>
-              </div>
-              <h3 className="text-xl font-bold mb-2">{issue.title}</h3>
-              <p className="text-gray-600 mb-4">{issue.description}</p>
-              {issue.image_url && <img src={issue.image_url} alt={issue.title} className="w-full h-64 object-cover rounded-lg mb-4" />}
+    const fetchIssues = async () => {
+        setLoading(true);
+        try {
+            let { data, error } = await supabase
+                .from('issues')
+                .select(`
+                    id, title, description, status, image_url,
+                    user_full_name, user_avatar_url,
+                    issue_likes ( user_id ),
+                    comments ( count )
+                `)
+                .order('created_at', { ascending: false });
+
+            if (error) throw error;
             
-            <div className="flex justify-between text-gray-500">
-              <button onClick={() => handleUpvote(issue.id)} className="flex items-center gap-2 hover:text-red-500">
-                ❤️ {issue.upvotes[0]?.count || 0} Likes
-              </button>
-              {/* Yahan comment count ab sahi dikhega */}
-              <Link to={`/dashboard/issue/${issue.id}`} className="flex items-center gap-2 hover:text-blue-500">
-                💬 {issue.comments[0]?.count || 0} Comments
-              </Link>
+            const processedIssues = data.map(issue => ({
+                ...issue,
+                like_count: issue.issue_likes.length,
+                comment_count: issue.comments[0]?.count || 0,
+                // Like status sirf tab check karein jab user logged in ho
+                is_liked_by_user: user ? issue.issue_likes.some(like => like.user_id === user.id) : false
+            }));
+            
+            setIssues(processedIssues);
+
+        } catch (error) {
+            console.error('Error fetching issues:', error.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+    
+    const handleLikeToggle = async (issueId, isLiked) => {
+        if (!user) {
+            alert("You must be logged in to like a post.");
+            return;
+        }
+
+        // Optimistic UI update
+        setIssues(currentIssues => 
+            currentIssues.map(issue => {
+                if (issue.id === issueId) {
+                    return {
+                        ...issue,
+                        is_liked_by_user: !isLiked,
+                        like_count: isLiked ? issue.like_count - 1 : issue.like_count + 1
+                    };
+                }
+                return issue;
+            })
+        );
+        
+        // Backend update
+        if (isLiked) {
+            await supabase.from('issue_likes').delete().match({ issue_id: issueId, user_id: user.id });
+        } else {
+            await supabase.from('issue_likes').insert({ issue_id: issueId, user_id: user.id });
+        }
+    };
+
+    if (loading) {
+        return <p className="text-center text-gray-500">Loading issues...</p>;
+    }
+
+    return (
+        <div className="min-h-full rounded-lg" style={{backgroundImage: `url('https://www.toptal.com/designers/subtlepatterns/uploads/double-bubble-outline.png')`}}>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 p-4">
+                <div className="lg:col-span-2 space-y-6">
+                    {issues && issues.length > 0 ? (
+                        issues.map(issue => (
+                            <div key={issue.id} className="bg-white p-4 rounded-lg shadow-md transition-shadow duration-300 hover:shadow-xl">
+                                <div className="flex items-center mb-4">
+                                    <img 
+                                        src={issue.user_avatar_url || 'https://placehold.co/40x40/EFEFEF/333333?text=U'} 
+                                        alt="user avatar" 
+                                        className="w-12 h-12 rounded-full mr-4 object-cover"
+                                    />
+                                    <div>
+                                        <p className="font-semibold text-gray-800">{issue.user_full_name || 'Anonymous'}</p>
+                                        <span className={`text-xs font-semibold px-2 py-1 rounded-full ${
+                                            issue.status === 'Pending' ? 'bg-yellow-200 text-yellow-800' : 'bg-green-200 text-green-800'
+                                        }`}>
+                                            {issue.status}
+                                        </span>
+                                    </div>
+                                </div>
+                                <h3 className="text-xl font-bold mb-2 text-gray-900">{issue.title}</h3>
+                                <p className="text-gray-600 mb-4 break-words">{issue.description}</p>
+                                {issue.image_url && (
+                                    <div className="mb-4 rounded-lg overflow-hidden">
+                                        <img src={issue.image_url} alt={issue.title} className="w-full max-h-96 object-cover" />
+                                    </div>
+                                )}
+                                <div className="flex justify-between items-center text-gray-500 text-sm border-t pt-3">
+                                    <div className="flex items-center gap-4">
+                                        <button onClick={() => handleLikeToggle(issue.id, issue.is_liked_by_user)} className="flex items-center gap-1.5 transition-transform duration-200 ease-in-out transform hover:scale-110">
+                                            {/* CORRECTED: Ab emoji ka sirf rang badlega, size nahi */}
+                                            <span className={`text-2xl ${issue.is_liked_by_user ? 'text-red-500' : 'text-gray-300'}`}>❤️</span>
+                                            <span className="font-semibold">{issue.like_count}</span>
+                                        </button>
+                                        <Link to={`/dashboard/issue/${issue.id}`} className="flex items-center gap-1.5">
+                                            <span>💬</span>
+                                            <span className="font-semibold">{issue.comment_count}</span>
+                                        </Link>
+                                    </div>
+                                    <Link to={`/dashboard/issue/${issue.id}`} className="text-blue-600 font-semibold hover:underline">
+                                        View Details
+                                    </Link>
+                                </div>
+                            </div>
+                        ))
+                    ) : (
+                        <div className="bg-white p-8 rounded-lg shadow-md text-center">
+                            <p className="text-gray-600">No issues have been reported yet. Be the first!</p>
+                        </div>
+                    )}
+                </div>
+                <div className="lg:col-span-1 space-y-6">
+                    <div className="bg-white p-6 rounded-lg shadow-md">
+                        <h3 className="text-lg font-bold mb-4">Community Stats</h3>
+                        <div className="space-y-3">
+                            <div className="flex justify-between">
+                                <span className="font-semibold">Total Issues:</span>
+                                <span>{issues.length}</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="font-semibold text-green-600">Resolved:</span>
+                                <span>{issues.filter(i => i.status === 'Resolved').length}</span>
+                            </div>
+                        </div>
+                    </div>
+                     <div className="bg-white p-6 rounded-lg shadow-md">
+                        <h3 className="text-lg font-bold mb-4">Quick Links</h3>
+                        <ul className="space-y-2">
+                           <li><Link to="/dashboard/report-issue" className="text-blue-600 hover:underline">➕ Report a New Issue</Link></li>
+                           <li><Link to="/dashboard/my-activity" className="text-blue-600 hover:underline">📊 View My Activity</Link></li>
+                        </ul>
+                    </div>
+                </div>
             </div>
-          </div>
-        ))}
-      </div>
-      {/* ... Right Sidebar ... */}
-    </div>
-  );
-}
+        </div>
+    );
+};
 
 export default HomePage;
+
