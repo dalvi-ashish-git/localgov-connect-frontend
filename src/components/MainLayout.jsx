@@ -1,18 +1,34 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, NavLink, Outlet } from 'react-router-dom';
-import NotificationIcon from './NotificationIcon'; // Icon component import kiya
+import { supabase } from '../supabaseClient'; // Supabase import kiya
+import NotificationIcon from './NotificationIcon';
 
-// Ek naya Header component banaya
+// Header component ko update kiya
 const Header = () => {
+    const [avatarUrl, setAvatarUrl] = useState(null);
+
+    useEffect(() => {
+        const fetchAvatar = async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                setAvatarUrl(user.user_metadata?.avatar_url);
+            }
+        };
+        fetchAvatar();
+    }, []);
+
     return (
         <header className="bg-white border-b p-4">
             <div className="flex items-center justify-end">
-                {/* Search bar ya aur kuch yahan add kar sakte hain */}
                 <div className="flex items-center gap-4">
                     <NotificationIcon />
                     <Link to="/dashboard/profile">
-                        {/* Placeholder for Profile Icon */}
-                        <div className="w-8 h-8 bg-gray-300 rounded-full"></div>
+                        {/* Ab yahan asli profile picture ya placeholder dikhega */}
+                        <img 
+                            src={avatarUrl || 'https://placehold.co/32x32/EFEFEF/333333?text=U'} 
+                            alt="User Avatar"
+                            className="w-8 h-8 rounded-full object-cover"
+                        />
                     </Link>
                 </div>
             </div>
@@ -20,7 +36,6 @@ const Header = () => {
     );
 };
 
-// Ek naya Sidebar component banaya
 const Sidebar = () => {
     const linkClasses = "flex items-center gap-3 px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg";
     const activeLinkClasses = "flex items-center gap-3 px-4 py-2 text-gray-800 bg-blue-100 rounded-lg font-semibold";
@@ -66,3 +81,4 @@ function MainLayout() {
 }
 
 export default MainLayout;
+
