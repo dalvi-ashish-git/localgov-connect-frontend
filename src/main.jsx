@@ -23,6 +23,7 @@ import AdminReportsPage from './components/AdminReportsPage.jsx';
 import AdminDepartmentsPage from './components/AdminDepartmentsPage.jsx';
 import AdminAnalyticsPage from './components/AdminAnalyticsPage.jsx';
 import IssueDetailPage from './components/IssueDetailPage.jsx';
+import NotificationsPage from './components/NotificationsPage.jsx'; // << NAYA PAGE IMPORT KIYA
 
 const router = createBrowserRouter([
   // Public Routes
@@ -56,6 +57,7 @@ const router = createBrowserRouter([
           { path: 'map', element: <MapPage /> },
           { path: 'my-activity', element: <MyActivityPage /> },
           { path: 'issue/:id', element: <IssueDetailPage />  },
+          { path: 'notifications', element: <NotificationsPage /> }, // << NAYE PAGE KA ROUTE ADD KIYA
         ]
       }
     ]
@@ -63,7 +65,7 @@ const router = createBrowserRouter([
   // Protected Admin Routes
   {
     path: '/admin',
-    element: <AdminProtectedRoute />, // Admin protection yahan lagaya gaya hai
+    element: <AdminProtectedRoute />,
     children: [
       {
         element: <AdminLayout />,
