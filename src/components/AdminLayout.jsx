@@ -1,56 +1,90 @@
-import React from 'react';
-import { Outlet, NavLink } from 'react-router-dom'; // Link ko NavLink se badla
+import React, { useState } from "react";
+import { Outlet, NavLink } from "react-router-dom";
 
 function AdminLayout() {
-  
-  // Styles for active and inactive links
-  const baseLinkClasses = "flex items-center gap-3 px-4 py-2 rounded-lg transition-colors duration-200";
-  const activeLinkClasses = `${baseLinkClasses} bg-gray-700`;
-  const inactiveLinkClasses = `${baseLinkClasses} hover:bg-gray-700`;
+  const [collapsed, setCollapsed] = useState(false);
+
+  const baseLinkClasses =
+    "flex items-center gap-3 px-4 py-2 rounded-lg transition-colors duration-200 relative";
+  const activeLinkClasses = `${baseLinkClasses} bg-gray-700 shadow-lg`;
+  const inactiveLinkClasses = `${baseLinkClasses} hover:bg-gray-700/80`;
 
   return (
     <div className="flex h-screen bg-gray-50">
       {/* Sidebar */}
-      <aside className="w-64 bg-gray-800 text-white flex flex-col">
-        <div className="p-6 text-2xl font-bold border-b border-gray-700">
-          Admin Panel
+      <aside
+        className={`flex flex-col ${
+          collapsed ? "w-20" : "w-64"
+        } bg-gradient-to-b from-gray-800 to-gray-900 text-white transition-all duration-300`}
+      >
+        {/* Sidebar Header */}
+        <div className="flex items-center justify-between p-6 border-b border-gray-700">
+          {!collapsed && <span className="text-2xl font-bold">Admin Panel</span>}
+          <button
+            onClick={() => setCollapsed(!collapsed)}
+            className="text-white text-xl focus:outline-none"
+          >
+            ☰
+          </button>
         </div>
+
+        {/* Sidebar Navigation */}
         <nav className="flex-1 p-4 space-y-2">
-          {/* Har Link ko NavLink se badla gaya hai */}
-          <NavLink 
-            to="/admin/dashboard" 
-            className={({ isActive }) => isActive ? activeLinkClasses : inactiveLinkClasses}
+          <NavLink
+            to="/admin/dashboard"
+            className={({ isActive }) =>
+              isActive ? activeLinkClasses : inactiveLinkClasses
+            }
+            title="Dashboard"
           >
-            <span>📊</span> Dashboard
+            <span>📊</span>
+            {!collapsed && <span>Dashboard</span>}
           </NavLink>
-          <NavLink 
-            to="/admin/reports" 
-            className={({ isActive }) => isActive ? activeLinkClasses : inactiveLinkClasses}
+          <NavLink
+            to="/admin/reports"
+            className={({ isActive }) =>
+              isActive ? activeLinkClasses : inactiveLinkClasses
+            }
+            title="Reports"
           >
-            <span>📋</span> Reports
+            <span>📋</span>
+            {!collapsed && <span>Reports</span>}
           </NavLink>
-          <NavLink 
-            to="/admin/departments" 
-            className={({ isActive }) => isActive ? activeLinkClasses : inactiveLinkClasses}
+          <NavLink
+            to="/admin/departments"
+            className={({ isActive }) =>
+              isActive ? activeLinkClasses : inactiveLinkClasses
+            }
+            title="Departments"
           >
-            <span>🏢</span> Departments
+            <span>🏢</span>
+            {!collapsed && <span>Departments</span>}
           </NavLink>
-          <NavLink 
-            to="/admin/analytics" 
-            className={({ isActive }) => isActive ? activeLinkClasses : inactiveLinkClasses}
+          <NavLink
+            to="/admin/analytics"
+            className={({ isActive }) =>
+              isActive ? activeLinkClasses : inactiveLinkClasses
+            }
+            title="Analytics"
           >
-            <span>📈</span> Analytics
+            <span>📈</span>
+            {!collapsed && <span>Analytics</span>}
           </NavLink>
         </nav>
+
+        {!collapsed && (
+          <div className="p-4 border-t border-gray-700 text-sm text-gray-300">
+            Logged in as Admin
+          </div>
+        )}
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 p-8 overflow-y-auto">
-        <Outlet /> {/* Yahan admin ke pages render honge */}
+      <main className="flex-1 p-8 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-400 scrollbar-track-gray-200">
+        <Outlet />
       </main>
     </div>
   );
 }
 
 export default AdminLayout;
-

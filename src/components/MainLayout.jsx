@@ -19,6 +19,7 @@ const NotificationIcon = ({ darkMode }) => (
 // --- Header ---
 const Header = ({ darkMode, setDarkMode }) => {
   const [user, setUser] = useState(null);
+
   useEffect(() => {
     const fetchUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -37,7 +38,12 @@ const Header = ({ darkMode, setDarkMode }) => {
         >
           {darkMode ? 'Light Mode' : 'Dark Mode'}
         </button>
-        <NotificationIcon darkMode={darkMode} />
+
+        {/* Notification icon click → new screen */}
+        <Link to="/dashboard/notifications">
+          <NotificationIcon darkMode={darkMode} />
+        </Link>
+
         <Link to="/dashboard/profile" className="flex items-center gap-2">
           <img src={user?.user_metadata?.avatar_url || 'https://placehold.co/32x32/EFEFEF/333333?text=U'} alt="Avatar" className="w-8 h-8 rounded-full border-2 border-gray-600" />
           <span className="hidden md:block font-semibold">{user?.user_metadata?.full_name || 'Profile'}</span>
@@ -47,30 +53,32 @@ const Header = ({ darkMode, setDarkMode }) => {
   );
 };
 
-// --- Sidebar ---
+// --- Sidebar with collapse ---
 const Sidebar = ({ darkMode }) => {
+  const [collapsed, setCollapsed] = useState(false);
+
   const baseLinkClasses = "flex items-center gap-3 px-4 py-2.5 rounded-lg font-semibold transition-colors duration-200";
   const activeLinkClasses = `${baseLinkClasses} bg-blue-600 text-white`;
   const inactiveLinkClasses = `${baseLinkClasses} hover:bg-blue-500 hover:text-white`;
 
   return (
-    <aside className={`w-64 h-full hidden md:flex flex-col transition-colors duration-300 ${darkMode ? 'bg-gray-800 text-gray-200' : 'bg-gray-100 text-gray-900'}`}>
-      <div className="p-4 border-b border-gray-700 flex items-center gap-3 justify-center">
-        <img src="https://kbjkpqqcouybdtqiuafo.supabase.co/storage/v1/object/public/public_assets/logo-1.jpeg" alt="Logo" className="w-10 h-10" />
-        <span className="text-xl font-bold">LocalGov</span>
+    <aside className={`h-full transition-all duration-300 flex flex-col ${collapsed ? 'w-20' : 'w-64'} ${darkMode ? 'bg-gray-800 text-gray-200' : 'bg-gray-100 text-gray-900'}`}>
+      <div className="p-4 border-b border-gray-700 flex items-center justify-between">
+        {!collapsed && <div className="flex items-center gap-3"><img src="https://kbjkpqqcouybdtqiuafo.supabase.co/storage/v1/object/public/public_assets/logo-1.jpeg" alt="Logo" className="w-10 h-10" /><span className="text-xl font-bold">LocalGov</span></div>}
+        <button onClick={() => setCollapsed(!collapsed)} className="text-xl font-bold focus:outline-none">☰</button>
       </div>
       <nav className="flex-1 flex flex-col p-4 space-y-2">
-        <NavLink to="/dashboard" end className={({ isActive }) => isActive ? activeLinkClasses : inactiveLinkClasses}><HomeIcon /> Home</NavLink>
-        <NavLink to="/dashboard/report-issue" className={({ isActive }) => isActive ? activeLinkClasses : inactiveLinkClasses}><PlusIcon /> Report Issue</NavLink>
-        <NavLink to="/dashboard/profile" className={({ isActive }) => isActive ? activeLinkClasses : inactiveLinkClasses}><UserIcon /> Profile</NavLink>
-        <NavLink to="/dashboard/map" className={({ isActive }) => isActive ? activeLinkClasses : inactiveLinkClasses}><MapIcon /> Map</NavLink>
-        <NavLink to="/dashboard/my-activity" className={({ isActive }) => isActive ? activeLinkClasses : inactiveLinkClasses}><ActivityIcon /> My Activity</NavLink>
+        <NavLink to="/dashboard" end className={({ isActive }) => isActive ? activeLinkClasses : inactiveLinkClasses} title="Home"><HomeIcon /> {!collapsed && 'Home'}</NavLink>
+        <NavLink to="/dashboard/report-issue" className={({ isActive }) => isActive ? activeLinkClasses : inactiveLinkClasses} title="Report Issue"><PlusIcon /> {!collapsed && 'Report Issue'}</NavLink>
+        <NavLink to="/dashboard/profile" className={({ isActive }) => isActive ? activeLinkClasses : inactiveLinkClasses} title="Profile"><UserIcon /> {!collapsed && 'Profile'}</NavLink>
+        <NavLink to="/dashboard/map" className={({ isActive }) => isActive ? activeLinkClasses : inactiveLinkClasses} title="Map"><MapIcon /> {!collapsed && 'Map'}</NavLink>
+        <NavLink to="/dashboard/my-activity" className={({ isActive }) => isActive ? activeLinkClasses : inactiveLinkClasses} title="My Activity"><ActivityIcon /> {!collapsed && 'My Activity'}</NavLink>
       </nav>
     </aside>
   );
 };
 
-// --- Main Layout ---
+// --- MainLayout ---
 function MainLayout() {
   const [darkMode, setDarkMode] = useState(false);
 
@@ -88,7 +96,6 @@ function MainLayout() {
       <Sidebar darkMode={darkMode} />
       <div className="flex-1 flex flex-col">
         <Header darkMode={darkMode} setDarkMode={setDarkMode} />
-        {/* Pass darkMode via context to all Outlet children */}
         <main className={`flex-1 p-6 overflow-y-auto transition-colors duration-300 ${darkMode ? 'bg-gray-900 scrollbar-thumb-gray-700 scrollbar-track-gray-800' : 'bg-gray-100 scrollbar-thumb-gray-400 scrollbar-track-gray-200'}`}>
           <Outlet context={{ darkMode }} />
         </main>
