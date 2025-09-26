@@ -7,14 +7,24 @@ function LoginPage() {
   const [password, setPassword] = useState('');
   const navigate = useNavigate();
 
-  // Email/Password se login karne ka function
+  const symbols = [
+    "🛣️", "💧", "⚡", "🚦", "🔥", "🗑️", "💡", "🚰", "🚍", "🌫️"
+  ];
+
+  const backgroundSymbols = Array.from({ length: 40 }).map((_, i) => {
+    const symbol = symbols[Math.floor(Math.random() * symbols.length)];
+    const top = Math.random() * 100;
+    const left = Math.random() * 100;
+    const size = Math.random() * 2 + 1.5;
+    const rotate = Math.random() * 360;
+    const delay = Math.random() * 5;
+    return { symbol, top, left, size, rotate, delay };
+  });
+
   async function handleLogin(e) {
     e.preventDefault();
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email: email,
-        password: password,
-      });
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
       navigate('/dashboard');
     } catch (error) {
@@ -22,12 +32,9 @@ function LoginPage() {
     }
   }
 
-  // Google se login karne ka naya function
   async function handleGoogleLogin() {
     try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-      });
+      const { error } = await supabase.auth.signInWithOAuth({ provider: 'google' });
       if (error) throw error;
     } catch (error) {
       alert(error.message);
@@ -35,17 +42,35 @@ function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-      <div className="flex flex-col md:flex-row bg-white rounded-2xl shadow-2xl max-w-4xl">
+    <div className="relative min-h-screen bg-gradient-to-br from-indigo-900 via-blue-900 to-gray-900 flex items-center justify-center overflow-hidden font-sans">
+
+      {/* Background Symbols */}
+      {backgroundSymbols.map((item, idx) => (
+        <span
+          key={idx}
+          className="absolute text-white opacity-20 animate-float"
+          style={{
+            top: `${item.top}%`,
+            left: `${item.left}%`,
+            fontSize: `${item.size}rem`,
+            transform: `rotate(${item.rotate}deg)`,
+            animationDelay: `${item.delay}s`,
+          }}
+        >
+          {item.symbol}
+        </span>
+      ))}
+
+      {/* Glassmorphic Login Card */}
+      <div className="flex flex-col md:flex-row bg-white/20 backdrop-blur-md border border-white/30 rounded-3xl shadow-xl max-w-4xl w-full overflow-hidden">
         
-        {/* Left Blue Panel */}
-        <div className="w-full md:w-1/2 p-8 md:p-12 bg-blue-600 text-white flex flex-col justify-center items-center rounded-t-2xl md:rounded-l-2xl md:rounded-r-none">
-          {/* LOGO YAHAN ADD KIYA GAYA HAI */}
-          <img src="https://kbjkpqqcouybdtqiuafo.supabase.co/storage/v1/object/public/public_assets/image-10%20(1).png" alt="LocalGov Connect Logo" className="w-32 h-32 mb-4" />
+        {/* Left Panel - Welcome + Google */}
+        <div className="w-full md:w-1/2 p-10 flex flex-col justify-center items-center bg-blue-600/30 backdrop-blur-md text-white">
+          <img src="https://kbjkpqqcouybdtqiuafo.supabase.co/storage/v1/object/public/public_assets/logo-1.jpeg" alt="Logo" className="w-28 h-28 mb-4 rounded-full" />
           <h1 className="text-3xl font-bold mb-2">Welcome Back!</h1>
           <p className="text-center mb-8">Login to report issues and connect with your community.</p>
           <button 
-            onClick={handleGoogleLogin} // onClick event add kiya
+            onClick={handleGoogleLogin}
             className="w-full max-w-xs flex justify-center items-center gap-2 bg-white text-gray-800 font-semibold py-2 rounded-lg hover:bg-gray-200 transition-colors"
           >
             <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google icon" className="w-6 h-6" />
@@ -53,29 +78,52 @@ function LoginPage() {
           </button>
         </div>
 
-        {/* Right White Panel (Login Form) */}
-        <div className="w-full md:w-1/2 p-8 md:p-12">
-          <h2 className="text-3xl font-bold text-blue-600 text-center mb-6">Citizen Login</h2>
-          <form onSubmit={handleLogin}>
-            <div className="mb-4">
-              <input type="email" placeholder="Email" className="w-full px-4 py-3 bg-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" value={email} onChange={(e) => setEmail(e.target.value)} required />
+        {/* Right Panel - Form */}
+        <div className="w-full md:w-1/2 p-10 flex flex-col justify-center">
+          <h2 className="text-3xl font-bold text-white text-center mb-6">Citizen Login</h2>
+          <form onSubmit={handleLogin} className="space-y-4">
+            <input 
+              type="email" 
+              placeholder="Email" 
+              className="w-full px-4 py-3 bg-white/70 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 text-gray-900"
+              value={email} 
+              onChange={(e) => setEmail(e.target.value)} 
+              required 
+            />
+            <input 
+              type="password" 
+              placeholder="Password" 
+              className="w-full px-4 py-3 bg-white/70 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 text-gray-900"
+              value={password} 
+              onChange={(e) => setPassword(e.target.value)} 
+              required 
+            />
+            <div className="text-right text-sm">
+              <a href="#" className="text-gray-200 hover:text-white">Forgot your password?</a>
             </div>
-            <div className="mb-4">
-              <input type="password" placeholder="Password" className="w-full px-4 py-3 bg-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" value={password} onChange={(e) => setPassword(e.target.value)} required />
-            </div>
-            <div className="text-right text-sm mb-6">
-              <a href="#" className="text-gray-500 hover:text-blue-600">Forgot your password?</a>
-            </div>
-            <button type="submit" className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition-colors font-bold">
+            <button type="submit" className="w-full bg-indigo-600 text-white py-3 rounded-lg hover:bg-indigo-500 transition font-bold shadow-lg">
               LOGIN
             </button>
           </form>
-          <p className="text-center text-gray-500 mt-6">
-            Don't have an account? <Link to="/signup" className="text-blue-600 font-semibold hover:underline">Create one</Link>
+          <p className="text-center text-gray-200 mt-6">
+            Don't have an account? <Link to="/signup" className="text-indigo-400 font-semibold hover:underline">Create one</Link>
           </p>
         </div>
 
       </div>
+
+      {/* Floating animation CSS */}
+      <style>
+        {`
+          @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+          }
+          .animate-float {
+            animation: float 6s ease-in-out infinite;
+          }
+        `}
+      </style>
     </div>
   );
 }
