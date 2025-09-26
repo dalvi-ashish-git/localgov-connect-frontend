@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../supabaseClient';
+// FIX: Changed the import path to be absolute from the project root to resolve the error.
+import { supabase } from '/src/supabaseClient.js';
 import { useNavigate } from 'react-router-dom';
 
 // Modal component
@@ -37,7 +38,13 @@ const ProfilePage = () => {
             if (user) {
                 setUser(user);
                 setFullName(user.user_metadata?.full_name || '');
-                setAvatarUrl(user.user_metadata?.avatar_url);
+                
+                // --- CHANGE #1: Add timestamp to initial URL to prevent caching ---
+                const initialAvatarUrl = user.user_metadata?.avatar_url;
+                if (initialAvatarUrl) {
+                    setAvatarUrl(`${initialAvatarUrl}?t=${new Date().getTime()}`);
+                }
+                
                 // Stats aur achievements dono ko ek saath fetch karein
                 fetchStatsAndAchievements(user.id);
             } else {
@@ -84,11 +91,22 @@ const ProfilePage = () => {
         const fileExt = file.name.split('.').pop();
         const fileName = `${user.id}.${fileExt}`;
         const { error } = await supabase.storage.from('avatars').upload(fileName, file, { upsert: true });
+
         if (error) { alert('Error uploading avatar: ' + error.message); return; }
+
         const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(fileName);
+        
+        // Database mein hamesha clean URL save karein (bina timestamp ke)
         const { error: updateError } = await supabase.auth.updateUser({ data: { avatar_url: publicUrl } });
-        if (updateError) { alert('Error updating avatar URL: ' + updateError.message); } 
-        else { setAvatarUrl(publicUrl); alert('Profile picture updated!'); }
+        
+        if (updateError) { 
+            alert('Error updating avatar URL: ' + updateError.message); 
+        } else { 
+            // --- CHANGE #2: Dikhane ke liye URL mein timestamp jodein ---
+            // Isse browser hamesha nayi image load karega
+            setAvatarUrl(`${publicUrl}?t=${new Date().getTime()}`); 
+            alert('Profile picture updated!'); 
+        }
     };
 
     const handleUpdateProfile = async () => {
