@@ -43,6 +43,10 @@ function OfficialLoginPage() {
   return (
     <div className="min-h-screen bg-gray-100 flex items-center justify-center">
       <div className="bg-white p-8 rounded-lg shadow-lg w-full max-w-sm">
+        {/* LOGO YAHAN ADD KIYA GAYA HAI */}
+        <div className="flex justify-center mb-6">
+            <img src="https://kbjkpqqcouybdtqiuafo.supabase.co/storage/v1/object/public/public_assets/image-16.png" alt="LocalGov Connect Logo" className="w-24 h-24" />
+        </div>
         <h2 className="text-3xl font-bold text-center text-gray-800 mb-6">Official Login</h2>
         <form onSubmit={handleLogin}>
           <div className="mb-4">
@@ -75,3 +79,4 @@ function OfficialLoginPage() {
 }
 
 export default OfficialLoginPage;
+
