@@ -1,223 +1,215 @@
 import React, { useState, useEffect } from 'react';
-// FIX: Changed the import path to be absolute from the project root to resolve the error.
 import { supabase } from '/src/supabaseClient.js';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useOutletContext } from 'react-router-dom';
 
-// Modal component
-const Modal = ({ children, onClose }) => (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center" onClick={onClose}>
-        <div className="bg-white p-6 rounded-2xl shadow-xl w-full max-w-md" onClick={e => e.stopPropagation()}>
-            {children}
-        </div>
+// Modal Component
+const Modal = ({ children, onClose, darkMode }) => (
+  <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center" onClick={onClose}>
+    <div className={`${darkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'} p-6 rounded-2xl shadow-xl w-full max-w-md`} onClick={(e) => e.stopPropagation()}>
+      {children}
     </div>
+  </div>
 );
 
 const ProfilePage = () => {
-    const navigate = useNavigate();
-    const [loading, setLoading] = useState(true);
-    const [user, setUser] = useState(null);
-    const [modalView, setModalView] = useState(null);
-    const [fullName, setFullName] = useState('');
-    const [avatarUrl, setAvatarUrl] = useState(null);
-    const [currentPassword, setCurrentPassword] = useState('');
-    const [newPassword, setNewPassword] = useState('');
-    const [confirmPassword, setConfirmPassword] = useState('');
+  const { darkMode = false } = useOutletContext() || {};
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState(null);
+  const [modalView, setModalView] = useState(null);
+  const [fullName, setFullName] = useState('');
+  const [avatarUrl, setAvatarUrl] = useState(null);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [stats, setStats] = useState({ total: 0, resolved: 0, upvotes: 0 });
+  const [achievements, setAchievements] = useState({ communityHero: false, topReporter: false });
+  const [profileCompletion, setProfileCompletion] = useState(0);
+  const [recentActivity, setRecentActivity] = useState([]);
 
-    // Statistics and Achievements states
-    const [stats, setStats] = useState({ total: 0, resolved: 0, upvotes: 0 });
-    const [achievements, setAchievements] = useState({
-        communityHero: false,
-        topReporter: false
-    });
-
-    useEffect(() => {
-        const fetchAllData = async () => {
-            setLoading(true);
-            const { data: { user } } = await supabase.auth.getUser();
-
-            if (user) {
-                setUser(user);
-                setFullName(user.user_metadata?.full_name || '');
-                
-                // --- CHANGE #1: Add timestamp to initial URL to prevent caching ---
-                const initialAvatarUrl = user.user_metadata?.avatar_url;
-                if (initialAvatarUrl) {
-                    setAvatarUrl(`${initialAvatarUrl}?t=${new Date().getTime()}`);
-                }
-                
-                // Stats aur achievements dono ko ek saath fetch karein
-                fetchStatsAndAchievements(user.id);
-            } else {
-                navigate('/login');
-            }
-            setLoading(false);
-        };
-        fetchAllData();
-    }, [navigate]);
-
-    const fetchStatsAndAchievements = async (userId) => {
-        // --- 1. Saare zaroori data ko ek saath fetch karein ---
-        const [
-            { count: totalCount },
-            { count: resolvedCount },
-            { count: upvotesCount }
-        ] = await Promise.all([
-            supabase.from('issues').select('*', { count: 'exact', head: true }).eq('user_id', userId),
-            supabase.from('issues').select('*', { count: 'exact', head: true }).eq('user_id', userId).eq('status', 'Resolved'),
-            supabase.from('issue_likes').select('*', { count: 'exact', head: true }).eq('user_id', userId)
-        ]);
-        
-        const total = totalCount || 0;
-        const resolved = resolvedCount || 0;
-        const upvotes = upvotesCount || 0;
-
-        setStats({ total, resolved, upvotes });
-
-        // --- 2. Achievements Check Karein ---
-        setAchievements({
-            communityHero: resolved >= 10, // 10+ resolved issues
-            topReporter: total >= 5,   // 5+ total reports
-        });
+  useEffect(() => {
+    const fetchAllData = async () => {
+      setLoading(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return navigate('/login');
+      setUser(user);
+      setFullName(user.user_metadata?.full_name || '');
+      const initialAvatar = user.user_metadata?.avatar_url;
+      if (initialAvatar) setAvatarUrl(`${initialAvatar}?t=${new Date().getTime()}`);
+      await fetchStatsAndAchievements(user.id);
+      await fetchRecentActivity(user.id);
+      calculateProfileCompletion(user);
+      setLoading(false);
     };
+    fetchAllData();
+  }, [navigate]);
 
-    const handleLogout = async () => {
-        await supabase.auth.signOut();
-        navigate('/login');
-    };
+  const calculateProfileCompletion = (userData) => {
+    let score = 0;
+    if (userData.user_metadata?.full_name) score += 40;
+    if (userData.user_metadata?.avatar_url) score += 30;
+    score += 30; // base
+    setProfileCompletion(score);
+  };
 
-    const uploadAvatar = async (event) => {
-        if (!event.target.files || event.target.files.length === 0) return;
-        const file = event.target.files[0];
-        const fileExt = file.name.split('.').pop();
-        const fileName = `${user.id}.${fileExt}`;
-        const { error } = await supabase.storage.from('avatars').upload(fileName, file, { upsert: true });
+  const fetchStatsAndAchievements = async (userId) => {
+    const [
+      { count: totalCount },
+      { count: resolvedCount },
+      { count: upvotesCount }
+    ] = await Promise.all([
+      supabase.from('issues').select('*', { count: 'exact', head: true }).eq('user_id', userId),
+      supabase.from('issues').select('*', { count: 'exact', head: true }).eq('user_id', userId).eq('status', 'Resolved'),
+      supabase.from('issue_likes').select('*', { count: 'exact', head: true }).eq('user_id', userId)
+    ]);
+    setStats({ total: totalCount || 0, resolved: resolvedCount || 0, upvotes: upvotesCount || 0 });
+    setAchievements({ communityHero: (resolvedCount || 0) >= 10, topReporter: (totalCount || 0) >= 5 });
+  };
 
-        if (error) { alert('Error uploading avatar: ' + error.message); return; }
+  const fetchRecentActivity = async (userId) => {
+    const { data } = await supabase.from('issues').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(5);
+    setRecentActivity(data || []);
+  };
 
-        const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(fileName);
-        
-        // Database mein hamesha clean URL save karein (bina timestamp ke)
-        const { error: updateError } = await supabase.auth.updateUser({ data: { avatar_url: publicUrl } });
-        
-        if (updateError) { 
-            alert('Error updating avatar URL: ' + updateError.message); 
-        } else { 
-            // --- CHANGE #2: Dikhane ke liye URL mein timestamp jodein ---
-            // Isse browser hamesha nayi image load karega
-            setAvatarUrl(`${publicUrl}?t=${new Date().getTime()}`); 
-            alert('Profile picture updated!'); 
-        }
-    };
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    navigate('/login');
+  };
 
-    const handleUpdateProfile = async () => {
-        const { error } = await supabase.auth.updateUser({ data: { full_name: fullName } });
-        if (error) { alert('Error updating profile: ' + error.message); } 
-        else {
-            alert('Profile updated successfully!');
-            setModalView(null);
-            const { data: { user: updatedUser } } = await supabase.auth.getUser();
-            setUser(updatedUser);
-        }
-    };
+  const uploadAvatar = async (e) => {
+    if (!e.target.files || !e.target.files[0]) return;
+    const file = e.target.files[0];
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${user.id}.${fileExt}`;
+    const { error } = await supabase.storage.from('avatars').upload(fileName, file, { upsert: true });
+    if (error) return alert('Avatar upload error: ' + error.message);
+    const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(fileName);
+    const { error: updateError } = await supabase.auth.updateUser({ data: { avatar_url: publicUrl } });
+    if (updateError) return alert('Update avatar URL error: ' + updateError.message);
+    setAvatarUrl(`${publicUrl}?t=${new Date().getTime()}`);
+  };
 
-    const handleUpdatePassword = async () => {
-        if (newPassword.length < 6) { alert("New password must be at least 6 characters long."); return; }
-        if (newPassword !== confirmPassword) { alert("New passwords do not match."); return; }
-        const { error } = await supabase.auth.updateUser({ password: newPassword });
-        if (error) { alert('Error updating password: ' + error.message); } 
-        else {
-            alert('Password updated successfully!');
-            setModalView(null);
-            setCurrentPassword('');
-            setNewPassword('');
-            setConfirmPassword('');
-        }
-    };
+  const handleUpdateProfile = async () => {
+    const { error } = await supabase.auth.updateUser({ data: { full_name: fullName } });
+    if (error) return alert('Error: ' + error.message);
+    alert('Profile updated!');
+    setModalView(null);
+    const { data: { user: updatedUser } } = await supabase.auth.getUser();
+    setUser(updatedUser);
+    calculateProfileCompletion(updatedUser);
+  };
 
-    const handleForgotPassword = async () => {
-        const { error } = await supabase.auth.resetPasswordForEmail(user.email, { redirectTo: window.location.origin });
-        if (error) { alert("Error sending password reset email: " + error.message); } 
-        else { alert("A password reset link has been sent to your email."); }
-    };
+  const handleUpdatePassword = async () => {
+    if (newPassword.length < 6) return alert('New password must be at least 6 characters.');
+    if (newPassword !== confirmPassword) return alert('Passwords do not match.');
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) return alert('Error: ' + error.message);
+    alert('Password updated!');
+    setModalView(null);
+    setCurrentPassword(''); setNewPassword(''); setConfirmPassword('');
+  };
 
-    if (loading) return <div className="text-center p-8">Loading profile...</div>;
+  if (loading) return <div className={`text-center p-8 ${darkMode ? 'text-gray-200' : 'text-gray-900'}`}>Loading profile...</div>;
 
-    return (
-        <div className="min-h-full" style={{backgroundImage: `url('https://www.toptal.com/designers/subtlepatterns/uploads/double-bubble-outline.png')`}}>
-            <div className="max-w-4xl mx-auto p-4 md:p-8">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                    {/* Left Profile Card */}
-                    <div className="md:col-span-1">
-                        <div className="bg-white p-6 rounded-2xl shadow-lg text-center flex flex-col h-full">
-                            <div className="relative w-24 h-24 mx-auto mb-4">
-                                <img src={avatarUrl || `https://placehold.co/150x150/EFEFEF/333333?text=${fullName?.[0] || 'U'}`} alt="User Avatar" className="w-24 h-24 rounded-full border-4 border-gray-200 object-cover" />
-                                <label htmlFor="avatar-upload" className="absolute bottom-0 right-0 bg-blue-500 text-white rounded-full p-1 cursor-pointer hover:bg-blue-600">
-                                    ✏️<input type="file" id="avatar-upload" className="hidden" accept="image/*" onChange={uploadAvatar} />
-                                </label>
-                            </div>
-                            <h2 className="text-2xl font-bold">{fullName || 'User'}</h2>
-                            <p className="text-gray-500 mb-4 break-words">{user?.email}</p>
-                            <div className="space-y-2">
-                                <button onClick={() => setModalView('editProfile')} className="text-sm font-semibold text-blue-600 hover:underline w-full text-left pl-2">✏️ Edit Profile</button>
-                                <button onClick={() => setModalView('changePassword')} className="text-sm font-semibold text-blue-600 hover:underline w-full text-left pl-2">🔒 Change Password</button>
-                            </div>
-                            <div className="mt-auto pt-4">
-                                <button onClick={handleLogout} className="w-full bg-red-500 text-white py-2 rounded-lg hover:bg-red-600">Logout</button>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Right Side Cards */}
-                    <div className="md:col-span-2 space-y-8">
-                        <div className="bg-white p-6 rounded-2xl shadow-lg">
-                            <h3 className="text-xl font-bold mb-4">Statistics</h3>
-                            <div className="flex justify-around text-center">
-                                <div><p className="text-2xl font-bold">{stats.total}</p><p className="text-gray-500">Total Reports</p></div>
-                                <div><p className="text-2xl font-bold text-green-500">{stats.resolved}</p><p className="text-gray-500">Resolved</p></div>
-                                <div><p className="text-2xl font-bold">{stats.upvotes}</p><p className="text-gray-500">Upvotes</p></div>
-                            </div>
-                        </div>
-                        <div className="bg-white p-6 rounded-2xl shadow-lg">
-                            <h3 className="text-xl font-bold mb-4">Achievements</h3>
-                            <div className="flex justify-around text-center">
-                                <div className={!achievements.communityHero ? 'filter grayscale opacity-50' : ''}>
-                                    <p className="text-4xl">🏅</p>
-                                    <p className="text-gray-500 font-semibold">Community Hero</p>
-                                    <p className="text-xs text-gray-400">(10+ Resolved Issues)</p>
-                                </div>
-                                <div className={!achievements.topReporter ? 'filter grayscale opacity-50' : ''}>
-                                    <p className="text-4xl">🛡️</p>
-                                    <p className="text-gray-500 font-semibold">Top Reporter</p>
-                                    <p className="text-xs text-gray-400">(5+ Issues Reported)</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+  return (
+    <div className={`min-h-full p-4 md:p-8 ${darkMode ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-900'}`}>
+      <div className="max-w-5xl mx-auto">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          {/* Left Profile Card */}
+          <div>
+            <div className={`${darkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'} rounded-2xl shadow-lg p-6 flex flex-col h-full transition hover:shadow-xl`}>
+              <div className="relative w-24 h-24 mx-auto mb-4">
+                <img src={avatarUrl || `https://placehold.co/150x150/EFEFEF/333333?text=${fullName?.[0] || 'U'}`} 
+                  alt="User Avatar" className="w-24 h-24 rounded-full border-4 border-blue-500 object-cover hover:scale-105 transition-transform duration-200" />
+                <label htmlFor="avatar-upload" className="absolute bottom-0 right-0 bg-blue-500 text-white rounded-full p-1 cursor-pointer hover:bg-blue-600">
+                  ✏️<input type="file" id="avatar-upload" className="hidden" accept="image/*" onChange={uploadAvatar} />
+                </label>
+              </div>
+              <h2 className="text-2xl font-bold text-center">{fullName || 'User'}</h2>
+              <p className={`${darkMode ? 'text-gray-300' : 'text-gray-500'} text-center mb-4 break-words`}>{user?.email}</p>
+              {/* Profile Completion */}
+              <div className="mb-4">
+                <p className={`${darkMode ? 'text-gray-300' : 'text-gray-600'} text-sm mb-1`}>Profile Completion: {profileCompletion}%</p>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div className="bg-blue-500 h-2 rounded-full transition-all duration-500" style={{ width: `${profileCompletion}%` }}></div>
                 </div>
+              </div>
+              <div className="space-y-2">
+                <button onClick={() => setModalView('editProfile')} className="text-sm font-semibold text-blue-600 hover:underline w-full text-left pl-2">✏️ Edit Profile</button>
+                <button onClick={() => setModalView('changePassword')} className="text-sm font-semibold text-blue-600 hover:underline w-full text-left pl-2">🔒 Change Password</button>
+              </div>
+              <div className="mt-auto pt-4">
+                <button onClick={handleLogout} className="w-full bg-red-500 hover:bg-red-600 text-white py-2 rounded-lg transition-colors">Logout</button>
+              </div>
+            </div>
+          </div>
+
+          {/* Right Side Cards */}
+          <div className="md:col-span-2 space-y-6">
+            {/* Statistics */}
+            <div className={`${darkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'} p-6 rounded-2xl shadow-lg transition hover:shadow-xl`}>
+              <h3 className="text-xl font-bold mb-4">Statistics</h3>
+              <div className="flex justify-around text-center">
+                <div><p className="text-2xl font-bold">{stats.total}</p><p className={`${darkMode ? 'text-gray-300' : 'text-gray-500'}`}>Total Reports</p></div>
+                <div><p className="text-2xl font-bold text-green-500">{stats.resolved}</p><p className={`${darkMode ? 'text-gray-300' : 'text-gray-500'}`}>Resolved</p></div>
+                <div><p className="text-2xl font-bold">{stats.upvotes}</p><p className={`${darkMode ? 'text-gray-300' : 'text-gray-500'}`}>Upvotes</p></div>
+              </div>
+            </div>
+            {/* Achievements */}
+            <div className={`${darkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'} p-6 rounded-2xl shadow-lg transition hover:shadow-xl`}>
+              <h3 className="text-xl font-bold mb-4">Achievements</h3>
+              <div className="flex justify-around text-center">
+                <div className={!achievements.communityHero ? 'filter grayscale opacity-50' : ''} title="Resolve 10+ issues">
+                  <p className="text-4xl animate-pulse">🏅</p>
+                  <p className={`${darkMode ? 'text-gray-300' : 'text-gray-500'} font-semibold`}>Community Hero</p>
+                  <p className="text-xs text-gray-400">(10+ Resolved Issues)</p>
+                </div>
+                <div className={!achievements.topReporter ? 'filter grayscale opacity-50' : ''} title="Report 5+ issues">
+                  <p className="text-4xl animate-pulse">🛡️</p>
+                  <p className={`${darkMode ? 'text-gray-300' : 'text-gray-500'} font-semibold`}>Top Reporter</p>
+                  <p className="text-xs text-gray-400">(5+ Reports)</p>
+                </div>
+              </div>
             </div>
 
-            {/* Modals */}
-            {modalView === 'editProfile' && <Modal onClose={() => setModalView(null)}>
-                <div className="space-y-4">
-                    <h3 className="font-bold text-lg text-center">Edit Profile</h3>
-                    <input type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Full Name" className="w-full p-2 border rounded-lg text-center"/>
-                    <button onClick={handleUpdateProfile} className="w-full bg-green-500 text-white py-2 rounded-lg hover:bg-green-600">Save Changes</button>
-                    <button onClick={() => setModalView(null)} className="w-full text-sm text-gray-500 hover:underline">Cancel</button>
-                </div>
-            </Modal>}
-            {modalView === 'changePassword' && <Modal onClose={() => setModalView(null)}>
-                 <div className="space-y-3 text-left">
-                    <h3 className="font-bold text-lg text-center">Change Password</h3>
-                    <input type="password" placeholder="Current Password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} className="w-full p-2 border rounded-lg" />
-                    <input type="password" placeholder="New Password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="w-full p-2 border rounded-lg" />
-                    <input type="password" placeholder="Confirm New Password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="w-full p-2 border rounded-lg" />
-                    <button onClick={handleUpdatePassword} className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700">Save Changes</button>
-                    <div className="text-center mt-2"><button onClick={handleForgotPassword} className="text-sm text-blue-600 hover:underline">Forgot Password?</button></div>
-                </div>
-            </Modal>}
+            {/* Recent Activity */}
+            <div className={`${darkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'} p-6 rounded-2xl shadow-lg transition hover:shadow-xl`}>
+              <h3 className="text-xl font-bold mb-4">Recent Activity</h3>
+              {recentActivity.length === 0 ? <p className={`${darkMode ? 'text-gray-300' : 'text-gray-500'}`}>No recent activity</p> :
+                <ul className="space-y-2">
+                  {recentActivity.map(issue => (
+                    <li key={issue.id} className={`${darkMode ? 'bg-gray-700' : 'bg-gray-100'} p-3 rounded-lg shadow-sm hover:shadow-md transition cursor-pointer`}>
+                      <p className="font-semibold">{issue.title}</p>
+                      <p className="text-sm text-gray-400">{new Date(issue.created_at).toLocaleString()}</p>
+                    </li>
+                  ))}
+                </ul>
+              }
+            </div>
+          </div>
         </div>
-    );
+      </div>
+
+      {/* Modals */}
+      {modalView === 'editProfile' &&
+        <Modal darkMode={darkMode} onClose={() => setModalView(null)}>
+          <h3 className="text-xl font-bold mb-4">Edit Profile</h3>
+          <input type="text" className={`${darkMode ? 'bg-gray-700 text-white' : 'bg-gray-100'} w-full p-2 rounded mb-4`} value={fullName} onChange={e => setFullName(e.target.value)} placeholder="Full Name" />
+          <button onClick={handleUpdateProfile} className="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 rounded-lg">Update</button>
+        </Modal>
+      }
+
+      {modalView === 'changePassword' &&
+        <Modal darkMode={darkMode} onClose={() => setModalView(null)}>
+          <h3 className="text-xl font-bold mb-4">Change Password</h3>
+          <input type="password" className={`${darkMode ? 'bg-gray-700 text-white' : 'bg-gray-100'} w-full p-2 rounded mb-2`} value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} placeholder="Current Password" />
+          <input type="password" className={`${darkMode ? 'bg-gray-700 text-white' : 'bg-gray-100'} w-full p-2 rounded mb-2`} value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="New Password" />
+          <input type="password" className={`${darkMode ? 'bg-gray-700 text-white' : 'bg-gray-100'} w-full p-2 rounded mb-4`} value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} placeholder="Confirm Password" />
+          <button onClick={handleUpdatePassword} className="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 rounded-lg">Update Password</button>
+        </Modal>
+      }
+    </div>
+  );
 };
 
 export default ProfilePage;
-
